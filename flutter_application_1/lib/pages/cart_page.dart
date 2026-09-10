@@ -145,10 +145,6 @@ class CartPage extends StatelessWidget {
                     itemBuilder: (ctx, i) {
                       final item = cartItems[i];
                       final productId = cartKeys[i];
-                      final productObj = cart.availableProducts.firstWhere(
-                        (p) => p.id == productId,
-                        orElse: () => cart.availableProducts[0],
-                      );
                       final ddrColor = _ddrColor(item.title);
 
                       return Container(
@@ -223,7 +219,7 @@ class CartPage extends StatelessWidget {
                                 ),
                                 InkWell(
                                   borderRadius: BorderRadius.circular(20),
-                                  onTap: () => cart.addItem(productObj),
+                                  onTap: () => cart.increaseQuantity(productId),
                                   child: Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(

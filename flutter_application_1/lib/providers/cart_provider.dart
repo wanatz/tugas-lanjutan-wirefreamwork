@@ -1,19 +1,9 @@
 import 'package:flutter/material.dart';
+import '../db/db_helper.dart';
 import '../models/product.dart';
 import '../models/cart_item.dart';
 
 class CartProvider with ChangeNotifier {
-  final List<Product> products = [
-    Product(id: 'p1', title: 'RAM DDR3 8GB', price: 350000, imageUrl: 'assets/images/ram1.jpg'),
-    Product(id: 'p2', title: 'RAM DDR4 8GB', price: 650000, imageUrl: 'assets/images/ram2.jpg'),
-    Product(id: 'p3', title: 'RAM DDR4 16GB', price: 650000, imageUrl: 'assets/images/ram3.jpg'),
-    Product(id: 'p4', title: 'RAM DDR5 16GB', price: 650000, imageUrl: 'assets/images/ram4.jpeg'),
-    // tambahkan produk lain di sini
-  ];
-
-  // alias supaya cart_page.dart yang pakai nama berbeda tetap jalan
-  List<Product> get availableProducts => products;
-
   final Map<String, CartItem> _items = {};
   Map<String, CartItem> get items => _items;
 
@@ -25,53 +15,64 @@ class CartProvider with ChangeNotifier {
     return total;
   }
 
-  void addItem(Product product) {
-    if (_items.containsKey(product.id)) {
-      _items.update(
-        product.id,
-        (existing) => CartItem(
-          id: existing.id,
-          title: existing.title,
-          price: existing.price,
-          imageUrl: existing.imageUrl,
-          quantity: existing.quantity + 1,
-        ),
-      );
-    } else {
-      _items.putIfAbsent(
-        product.id,
-        () => CartItem(
-          id: product.id,
-          title: product.title,
-          price: product.price,
-          imageUrl: product.imageUrl,
-          quantity: 1,
-        ),
-      );
+  Future<void> loadCart() async {
+    final rows = await DBHelper.instance.getCartItems();
+    _items.clear();
+    for (final row in rows) {
+      final item = CartItem.fromMap(row);
+      _items[item.productId] = item;
     }
     notifyListeners();
   }
 
-  void removeSingleItem(String productId) {
-    if (!_items.containsKey(productId)) return;
-    if (_items[productId]!.quantity > 1) {
-      _items.update(
-        productId,
-        (existing) => CartItem(
-          id: existing.id,
-          title: existing.title,
-          price: existing.price,
-          imageUrl: existing.imageUrl,
-          quantity: existing.quantity - 1,
-        ),
-      );
+  Future<void> addItem(Product product) async {
+    if (_items.containsKey(product.id)) {
+      final existing = _items[product.id]!;
+      final updated = existing.copyWith(quantity: existing.quantity + 1);
+      await DBHelper.instance.updateCartQuantity(updated.id, updated.quantity);
+      _items[product.id] = updated;
     } else {
+      final newItem = CartItem(
+        id: 'cart_${product.id}',
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+      );
+      await DBHelper.instance.insertCart(newItem.toMap());
+      _items[product.id] = newItem;
+    }
+    notifyListeners();
+  }
+
+  Future<void> increaseQuantity(String productId) async {
+    if (!_items.containsKey(productId)) return;
+    final existing = _items[productId]!;
+    final updated = existing.copyWith(quantity: existing.quantity + 1);
+    await DBHelper.instance.updateCartQuantity(updated.id, updated.quantity);
+    _items[productId] = updated;
+    notifyListeners();
+  }
+
+  Future<void> removeSingleItem(String productId) async {
+    if (!_items.containsKey(productId)) return;
+    final existing = _items[productId]!;
+
+    if (existing.quantity > 1) {
+      final updated = existing.copyWith(quantity: existing.quantity - 1);
+      await DBHelper.instance.updateCartQuantity(updated.id, updated.quantity);
+      _items[productId] = updated;
+    } else {
+      await DBHelper.instance.deleteCartItem(existing.id);
       _items.remove(productId);
     }
     notifyListeners();
   }
 
-  void clear() {
+  Future<void> clear() async {
+    for (final item in _items.values) {
+      await DBHelper.instance.deleteCartItem(item.id);
+    }
     _items.clear();
     notifyListeners();
   }
